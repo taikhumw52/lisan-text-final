@@ -1,0 +1,6 @@
+{
+  "name": "LisanText",
+  "description": "Converts Romanized Lisan ud-Dawat into proper Arabic-script Lisan ud-Dawat, with integrated dictionary, unknown words tracking, and translation features.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
