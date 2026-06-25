@@ -4,16 +4,17 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Settings, Globe, Shield, RefreshCw, User, HelpCircle } from 'lucide-react';
+import { Settings, Globe, Shield, RefreshCw, User, HelpCircle, LogOut } from 'lucide-react';
 import { UserProfile } from '../types.js';
+import AuthView from './AuthView.js';
+import { authService } from '../lib/supabase.js';
 
-export default function SettingsView() {
-  const [profile, setProfile] = useState<UserProfile>({
-    id: 'u1',
-    email: 'taikhumw52@gmail.com',
-    role: 'admin'
-  });
+interface SettingsViewProps {
+  profile: UserProfile | null;
+  onProfileChange: (profile: UserProfile | null) => void;
+}
 
+export default function SettingsView({ profile, onProfileChange }: SettingsViewProps) {
   const [liveModeByDefault, setLiveModeByDefault] = useState<boolean>(true);
   const [syllableSplits, setSyllableSplits] = useState<boolean>(true);
   const [dictionarySyncInterval, setDictionarySyncInterval] = useState<string>('every_hour');
@@ -21,6 +22,25 @@ export default function SettingsView() {
   const handleSaveSettings = () => {
     alert('User preferences and system conversion config saved locally!');
   };
+
+  const handleLogOut = async () => {
+    await authService.signOut();
+    onProfileChange(null);
+  };
+
+  if (!profile) {
+    return (
+      <div className="max-w-4xl mx-auto space-y-8 animate-fade-in py-2 text-slate-800 dark:text-slate-100">
+        <div>
+          <h1 className="text-3xl font-serif font-bold text-slate-900 dark:text-white">Authentication</h1>
+          <p className="text-slate-500 dark:text-slate-400 mt-1">
+            Sign in or create a Supabase account to sync user roles and manage the converter dictionary.
+          </p>
+        </div>
+        <AuthView onAuthSuccess={(p) => onProfileChange(p)} />
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 animate-fade-in py-2 text-slate-800 dark:text-slate-100">
@@ -111,11 +131,23 @@ export default function SettingsView() {
               <div>
                 <p className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Security Clearance</p>
                 <div className="flex items-center gap-1.5 mt-1">
-                  <Shield className="h-4.5 w-4.5 text-emerald-500" />
-                  <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">
-                    {profile.role} Profile Mode
+                  <Shield className={`h-4.5 w-4.5 ${profile.role === 'admin' ? 'text-emerald-500' : 'text-amber-500'}`} />
+                  <span className={`text-xs font-bold uppercase tracking-wide ${
+                    profile.role === 'admin' ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'
+                  }`}>
+                    {profile.role} Profile
                   </span>
                 </div>
+              </div>
+
+              <div className="pt-3 border-t border-natural-border/30 dark:border-slate-800/40">
+                <button
+                  onClick={handleLogOut}
+                  className="w-full py-2.5 px-4 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/20 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200/50 dark:border-rose-950/50 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer"
+                >
+                  <LogOut className="h-4 w-4" />
+                  Log Out Session
+                </button>
               </div>
             </div>
           </div>

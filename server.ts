@@ -8,7 +8,7 @@ import path from 'path';
 import fs from 'fs';
 import dotenv from 'dotenv';
 import { createServer as createViteServer } from 'vite';
-import { DictionaryWord, UnknownWord, ConversionHistoryItem, AnalyticsStats } from './src/types.js';
+import { DictionaryWord, UnknownWord, ConversionHistoryItem, AnalyticsStats, CorrectionReport, DictionaryVersion } from './src/types.js';
 
 // Load environment variables
 dotenv.config();
@@ -167,6 +167,42 @@ let dictionaryDb: DictionaryWord[] = [
 let unknownWordsDb: UnknownWord[] = [];
 let conversionHistoryDb: ConversionHistoryItem[] = [];
 
+let correctionReportsDb: CorrectionReport[] = [
+  {
+    id: 'rep1',
+    romanized: 'maula',
+    currentOutput: 'ماولا',
+    correctArabic: 'مولى',
+    explanation: 'Common alternate spelling that should standardize to the soft ya alif-maqsurah.',
+    status: 'pending',
+    timestamp: new Date(Date.now() - 3600000 * 2).toISOString()
+  },
+  {
+    id: 'rep2',
+    romanized: 'namaz',
+    currentOutput: 'نماز',
+    correctArabic: 'نماز',
+    explanation: 'Reported as a correct spelling check, already verified.',
+    status: 'approved',
+    timestamp: new Date(Date.now() - 3600000 * 5).toISOString()
+  }
+];
+
+let dictionaryVersionsDb: DictionaryVersion[] = [
+  {
+    id: 'ver1',
+    wordId: '4',
+    romanized: 'moula',
+    previousArabic: 'مواى',
+    newArabic: 'مولى',
+    previousMeaning: 'Master / Spiritual Leader',
+    newMeaning: 'Master / Spiritual Leader',
+    changedBy: 'Admin (taikhumw52@gmail.com)',
+    timestamp: new Date(Date.now() - 3600000 * 1).toISOString(),
+    changeType: 'update'
+  }
+];
+
 // Seed sample analytics data
 let analyticsStats: AnalyticsStats = {
   totalConversionsCount: 4,
@@ -185,6 +221,16 @@ let analyticsStats: AnalyticsStats = {
 async function startServer() {
   const app = express();
   app.use(express.json());
+
+  // Middleware to check if the active user is an admin
+  const checkAdmin = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const role = req.headers['x-user-role'];
+    if (role === 'admin') {
+      next();
+    } else {
+      res.status(403).json({ error: 'Access Denied: Administrator role required.' });
+    }
+  };
 
   // --- API Routes ---
 
@@ -231,7 +277,7 @@ async function startServer() {
     res.json(results);
   });
 
-  app.post('/api/dictionary', (req, res) => {
+  app.post('/api/dictionary', checkAdmin, (req, res) => {
     const { romanized, arabic, meaning, category } = req.body;
     if (!romanized || !arabic) {
       return res.status(400).json({ error: 'Romanized word and Arabic script are required.' });
@@ -249,10 +295,26 @@ async function startServer() {
 
     dictionaryDb.push(newWord);
     analyticsStats.dictionarySize = dictionaryDb.length;
+
+    // Log Version History
+    const newVersion: DictionaryVersion = {
+      id: Math.random().toString(36).substr(2, 9),
+      wordId: newWord.id,
+      romanized: newWord.romanized,
+      previousArabic: '',
+      newArabic: newWord.arabic,
+      previousMeaning: '',
+      newMeaning: newWord.meaning,
+      changedBy: 'Admin (taikhumw52@gmail.com)',
+      timestamp: new Date().toISOString(),
+      changeType: 'create'
+    };
+    dictionaryVersionsDb.unshift(newVersion);
+
     res.status(201).json(newWord);
   });
 
-  app.put('/api/dictionary/:id', (req, res) => {
+  app.put('/api/dictionary/:id', checkAdmin, (req, res) => {
     const { id } = req.params;
     const { romanized, arabic, meaning, category } = req.body;
     const index = dictionaryDb.findIndex(w => w.id === id);
@@ -260,6 +322,8 @@ async function startServer() {
     if (index === -1) {
       return res.status(404).json({ error: 'Word not found' });
     }
+
+    const original = { ...dictionaryDb[index] };
 
     dictionaryDb[index] = {
       ...dictionaryDb[index],
@@ -269,24 +333,55 @@ async function startServer() {
       category: category ?? dictionaryDb[index].category
     };
 
+    // Log Version History
+    const newVersion: DictionaryVersion = {
+      id: Math.random().toString(36).substr(2, 9),
+      wordId: id,
+      romanized: dictionaryDb[index].romanized,
+      previousArabic: original.arabic,
+      newArabic: dictionaryDb[index].arabic,
+      previousMeaning: original.meaning,
+      newMeaning: dictionaryDb[index].meaning,
+      changedBy: 'Admin (taikhumw52@gmail.com)',
+      timestamp: new Date().toISOString(),
+      changeType: 'update'
+    };
+    dictionaryVersionsDb.unshift(newVersion);
+
     res.json(dictionaryDb[index]);
   });
 
-  app.delete('/api/dictionary/:id', (req, res) => {
+  app.delete('/api/dictionary/:id', checkAdmin, (req, res) => {
     const { id } = req.params;
-    const initialLength = dictionaryDb.length;
-    dictionaryDb = dictionaryDb.filter(w => w.id !== id);
+    const original = dictionaryDb.find(w => w.id === id);
 
-    if (dictionaryDb.length === initialLength) {
+    if (!original) {
       return res.status(404).json({ error: 'Word not found' });
     }
 
+    dictionaryDb = dictionaryDb.filter(w => w.id !== id);
     analyticsStats.dictionarySize = dictionaryDb.length;
+
+    // Log Version History
+    const newVersion: DictionaryVersion = {
+      id: Math.random().toString(36).substr(2, 9),
+      wordId: id,
+      romanized: original.romanized,
+      previousArabic: original.arabic,
+      newArabic: '',
+      previousMeaning: original.meaning,
+      newMeaning: '',
+      changedBy: 'Admin (taikhumw52@gmail.com)',
+      timestamp: new Date().toISOString(),
+      changeType: 'delete'
+    };
+    dictionaryVersionsDb.unshift(newVersion);
+
     res.json({ success: true });
   });
 
   // Unknown Words Endpoints
-  app.get('/api/unknown-words', (req, res) => {
+  app.get('/api/unknown-words', checkAdmin, (req, res) => {
     res.json(unknownWordsDb);
   });
 
@@ -317,7 +412,7 @@ async function startServer() {
     res.status(201).json(newUnknown);
   });
 
-  app.put('/api/unknown-words/:id', (req, res) => {
+  app.put('/api/unknown-words/:id', checkAdmin, (req, res) => {
     const { id } = req.params;
     const { status, suggestedTransliteration } = req.body;
     const index = unknownWordsDb.findIndex(w => w.id === id);
@@ -336,7 +431,7 @@ async function startServer() {
   });
 
   // Analytics Endpoints
-  app.get('/api/analytics', (req, res) => {
+  app.get('/api/analytics', checkAdmin, (req, res) => {
     res.json(analyticsStats);
   });
 
@@ -368,6 +463,105 @@ async function startServer() {
     }
 
     res.status(201).json(newItem);
+  });
+
+  // Correction Reports Endpoints
+  app.get('/api/reports', checkAdmin, (req, res) => {
+    res.json(correctionReportsDb);
+  });
+
+  app.post('/api/reports', (req, res) => {
+    const { romanized, currentOutput, correctArabic, explanation } = req.body;
+    if (!romanized || !correctArabic) {
+      return res.status(400).json({ error: 'Romanized word and correct Arabic script are required.' });
+    }
+
+    const newReport: CorrectionReport = {
+      id: Math.random().toString(36).substr(2, 9),
+      romanized,
+      currentOutput: currentOutput || '',
+      correctArabic,
+      explanation: explanation || '',
+      status: 'pending',
+      timestamp: new Date().toISOString()
+    };
+
+    correctionReportsDb.unshift(newReport);
+    res.status(201).json(newReport);
+  });
+
+  app.put('/api/reports/:id', checkAdmin, (req, res) => {
+    const { id } = req.params;
+    const { status } = req.body;
+    const reportIndex = correctionReportsDb.findIndex(r => r.id === id);
+
+    if (reportIndex === -1) {
+      return res.status(404).json({ error: 'Report not found' });
+    }
+
+    const report = correctionReportsDb[reportIndex];
+    report.status = status;
+
+    if (status === 'approved') {
+      // Find the word in dictionary
+      const dictIndex = dictionaryDb.findIndex(
+        w => w.romanized.toLowerCase() === report.romanized.toLowerCase()
+      );
+
+      if (dictIndex !== -1) {
+        // Update existing word
+        const original = { ...dictionaryDb[dictIndex] };
+        dictionaryDb[dictIndex].arabic = report.correctArabic;
+
+        const newVersion: DictionaryVersion = {
+          id: Math.random().toString(36).substr(2, 9),
+          wordId: original.id,
+          romanized: original.romanized,
+          previousArabic: original.arabic,
+          newArabic: report.correctArabic,
+          previousMeaning: original.meaning,
+          newMeaning: original.meaning,
+          changedBy: 'Admin (taikhumw52@gmail.com) via Feedback Approval',
+          timestamp: new Date().toISOString(),
+          changeType: 'update'
+        };
+        dictionaryVersionsDb.unshift(newVersion);
+      } else {
+        // Create new word
+        const newWord: DictionaryWord = {
+          id: Math.random().toString(36).substr(2, 9),
+          romanized: report.romanized,
+          arabic: report.correctArabic,
+          meaning: report.explanation || 'Added via feedback approval',
+          category: 'Uncategorized',
+          frequency: 0,
+          dateAdded: new Date().toISOString()
+        };
+        dictionaryDb.push(newWord);
+        analyticsStats.dictionarySize = dictionaryDb.length;
+
+        const newVersion: DictionaryVersion = {
+          id: Math.random().toString(36).substr(2, 9),
+          wordId: newWord.id,
+          romanized: newWord.romanized,
+          previousArabic: '',
+          newArabic: report.correctArabic,
+          previousMeaning: '',
+          newMeaning: newWord.meaning,
+          changedBy: 'Admin (taikhumw52@gmail.com) via Feedback Approval',
+          timestamp: new Date().toISOString(),
+          changeType: 'create'
+        };
+        dictionaryVersionsDb.unshift(newVersion);
+      }
+    }
+
+    res.json(report);
+  });
+
+  // Version History Endpoints
+  app.get('/api/versions', checkAdmin, (req, res) => {
+    res.json(dictionaryVersionsDb);
   });
 
   // --- Serve Client App ---

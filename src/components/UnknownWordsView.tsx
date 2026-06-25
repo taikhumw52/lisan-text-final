@@ -38,7 +38,7 @@ export default function UnknownWordsView() {
   const handleSelectItem = (item: UnknownWord) => {
     setSelectedItem(item);
     // Auto-generate suggested transliteration if empty
-    const suggestion = item.suggestedTransliteration || transliterateWord(item.word);
+    const suggestion = item.suggestedTransliteration || transliterateWord(item.word).arabic;
     setManualArabicInput(suggestion);
     setManualMeaning('');
     setManualCategory('Nouns');
@@ -187,7 +187,7 @@ export default function UnknownWordsView() {
                     <div className="flex justify-between items-center mt-1.5">
                       <span className="text-[10px] text-slate-400">Review phonetic match accuracy</span>
                       <button
-                        onClick={() => setManualArabicInput(transliterateWord(selectedItem.word))}
+                        onClick={() => setManualArabicInput(transliterateWord(selectedItem.word).arabic)}
                         className="text-[10px] font-semibold text-natural-sage dark:text-indigo-400 hover:underline flex items-center gap-1 cursor-pointer"
                       >
                         Reset to phonetic guess

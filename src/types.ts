@@ -11,9 +11,34 @@ export interface DictionaryWord {
   category: string;
   frequency: number;
   dateAdded: string;
+  alternates?: string[];
 }
 
 export type UnknownWordStatus = 'pending' | 'approved' | 'rejected';
+
+export interface CorrectionReport {
+  id: string;
+  romanized: string;
+  currentOutput: string;
+  correctArabic: string;
+  explanation: string;
+  status: 'pending' | 'approved' | 'rejected';
+  timestamp: string;
+}
+
+export interface DictionaryVersion {
+  id: string;
+  wordId: string;
+  romanized: string;
+  previousArabic: string;
+  newArabic: string;
+  previousMeaning: string;
+  newMeaning: string;
+  changedBy: string;
+  timestamp: string;
+  changeType: 'create' | 'update' | 'delete';
+}
+
 
 export interface UnknownWord {
   id: string;

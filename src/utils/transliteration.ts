@@ -661,7 +661,7 @@ const SINGLE_CHARS: { [key: string]: string } = {
   'y': 'ي',
   'i': 'ي',
   'u': 'و',
-  'e': 'ي',
+  'e': 'ے',
   'o': 'و',
   "'": 'ع',
 };
@@ -983,7 +983,7 @@ export async function convertText(
       const phoneticResult = transliterateWord(cleanWord);
       detail = {
         original: cleanWord,
-        converted: phoneticResult.arabic,
+        converted: phoneticResult.arabic || cleanWord,
         method: 'transliteration_rules',
         confidence: phoneticResult.confidence,
         explanation: phoneticResult.explanation

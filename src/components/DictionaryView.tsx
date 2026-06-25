@@ -8,7 +8,11 @@ import { Search, Plus, Edit2, Trash2, Download, Upload, Filter, X, Save } from '
 import { DictionaryWord } from '../types.js';
 import { fetchDictionary, addDictionaryWord, updateDictionaryWord, deleteDictionaryWord } from '../services/api.js';
 
-export default function DictionaryView() {
+interface DictionaryViewProps {
+  isAdmin?: boolean;
+}
+
+export default function DictionaryView({ isAdmin = false }: DictionaryViewProps) {
   const [words, setWords] = useState<DictionaryWord[]>([]);
   const [search, setSearch] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<string>('');
@@ -170,29 +174,31 @@ export default function DictionaryView() {
           <h1 className="text-3xl font-serif font-bold text-slate-900 dark:text-white">Lisan Dictionary</h1>
           <p className="text-slate-500 dark:text-slate-400 mt-1">Search and manage words, meanings, and standardized Lisan spellings</p>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            onClick={handleExportCsv}
-            className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-950 border border-natural-border dark:border-slate-800 rounded-xl text-sm font-semibold hover:bg-natural-bg/40 dark:hover:bg-slate-900 transition-all text-slate-700 dark:text-slate-300 cursor-pointer shadow-sm"
-          >
-            <Download className="h-4 w-4" />
-            Export CSV
-          </button>
-          <button
-            onClick={() => setIsCsvModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-950 border border-natural-border dark:border-slate-800 rounded-xl text-sm font-semibold hover:bg-natural-bg/40 dark:hover:bg-slate-900 transition-all text-slate-700 dark:text-slate-300 cursor-pointer shadow-sm"
-          >
-            <Upload className="h-4 w-4" />
-            Import CSV
-          </button>
-          <button
-            onClick={handleOpenAddModal}
-            className="flex items-center gap-2 px-4 py-2 bg-natural-sage hover:bg-natural-sage-hover text-white rounded-xl text-sm font-semibold transition-all shadow-md shadow-natural-sage/20 cursor-pointer"
-          >
-            <Plus className="h-4 w-4" />
-            Add Word
-          </button>
-        </div>
+        {isAdmin && (
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={handleExportCsv}
+              className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-950 border border-natural-border dark:border-slate-800 rounded-xl text-sm font-semibold hover:bg-natural-bg/40 dark:hover:bg-slate-900 transition-all text-slate-700 dark:text-slate-300 cursor-pointer shadow-sm"
+            >
+              <Download className="h-4 w-4" />
+              Export CSV
+            </button>
+            <button
+              onClick={() => setIsCsvModalOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-950 border border-natural-border dark:border-slate-800 rounded-xl text-sm font-semibold hover:bg-natural-bg/40 dark:hover:bg-slate-900 transition-all text-slate-700 dark:text-slate-300 cursor-pointer shadow-sm"
+            >
+              <Upload className="h-4 w-4" />
+              Import CSV
+            </button>
+            <button
+              onClick={handleOpenAddModal}
+              className="flex items-center gap-2 px-4 py-2 bg-natural-sage hover:bg-natural-sage-hover text-white rounded-xl text-sm font-semibold transition-all shadow-md shadow-natural-sage/20 cursor-pointer"
+            >
+              <Plus className="h-4 w-4" />
+              Add Word
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Searching / Filtering / Sorting Controls Bar */}
@@ -260,7 +266,7 @@ export default function DictionaryView() {
                   <th className="py-4 px-6 font-semibold">Meaning</th>
                   <th className="py-4 px-6 font-semibold">Category</th>
                   <th className="py-4 px-6 font-semibold text-center">Frequency</th>
-                  <th className="py-4 px-6 text-right font-semibold">Actions</th>
+                  {isAdmin && <th className="py-4 px-6 text-right font-semibold">Actions</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-natural-border/20 dark:divide-slate-800/40">
@@ -277,24 +283,26 @@ export default function DictionaryView() {
                       </span>
                     </td>
                     <td className="py-4.5 px-6 text-center text-xs text-slate-500 font-mono">{word.frequency} searches</td>
-                    <td className="py-4.5 px-6 text-right">
-                      <div className="flex justify-end gap-2">
-                        <button
-                          onClick={() => handleOpenEditModal(word)}
-                          className="p-1.5 text-slate-400 hover:text-natural-sage dark:hover:text-indigo-400 hover:bg-natural-bg/50 dark:hover:bg-slate-900 rounded-lg transition-all cursor-pointer"
-                          title="Edit Entry"
-                        >
-                          <Edit2 className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteWord(word.id)}
-                          className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded-lg transition-all cursor-pointer"
-                          title="Delete Entry"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </td>
+                    {isAdmin && (
+                      <td className="py-4.5 px-6 text-right">
+                        <div className="flex justify-end gap-2">
+                          <button
+                            onClick={() => handleOpenEditModal(word)}
+                            className="p-1.5 text-slate-400 hover:text-natural-sage dark:hover:text-indigo-400 hover:bg-natural-bg/50 dark:hover:bg-slate-900 rounded-lg transition-all cursor-pointer"
+                            title="Edit Entry"
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteWord(word.id)}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded-lg transition-all cursor-pointer"
+                            title="Delete Entry"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

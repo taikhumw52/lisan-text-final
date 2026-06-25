@@ -4,9 +4,9 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Copy, Trash2, RefreshCw, Check, Clock, Sparkles } from 'lucide-react';
+import { Copy, Trash2, RefreshCw, Check, Clock, Sparkles, AlertTriangle } from 'lucide-react';
 import { DictionaryWord, ConversionHistoryItem } from '../types.js';
-import { fetchDictionary, logHistory, fetchHistory, logUnknownWord } from '../services/api.js';
+import { fetchDictionary, logHistory, fetchHistory, logUnknownWord, submitReport } from '../services/api.js';
 import { convertText } from '../utils/transliteration.js';
 
 export default function ConverterView() {
@@ -19,7 +19,17 @@ export default function ConverterView() {
   const [copied, setCopied] = useState<boolean>(false);
   const [wordDetails, setWordDetails] = useState<any[]>([]);
   const [averageConfidence, setAverageConfidence] = useState<number>(1.0);
+  const [detectedUnknowns, setDetectedUnknowns] = useState<string[]>([]);
   const conversionTimeout = useRef<NodeJS.Timeout | null>(null);
+
+  // Correction report state
+  const [showReportModal, setShowReportModal] = useState<boolean>(false);
+  const [reportRomanized, setReportRomanized] = useState<string>('');
+  const [reportCurrentOutput, setReportCurrentOutput] = useState<string>('');
+  const [reportCorrectArabic, setReportCorrectArabic] = useState<string>('');
+  const [reportExplanation, setReportExplanation] = useState<string>('');
+  const [isReporting, setIsReporting] = useState<boolean>(false);
+  const [reportSuccess, setReportSuccess] = useState<boolean>(false);
 
   // Load Dictionary and Conversion History on mount
   useEffect(() => {
@@ -41,6 +51,7 @@ export default function ConverterView() {
   const handleConvert = async (textToConvert: string) => {
     if (!textToConvert.trim()) {
       setOutput('');
+      setDetectedUnknowns([]);
       return;
     }
     setIsConverting(true);
@@ -62,6 +73,7 @@ export default function ConverterView() {
       setOutput(result.convertedText);
       setWordDetails(result.wordDetails);
       setAverageConfidence(result.averageConfidence);
+      setDetectedUnknowns(result.unknownWords || []);
 
       // Log to conversion history
       if (textToConvert !== 'Ya saiyyedi wa maulaya khuz biyadi...') {
@@ -107,6 +119,35 @@ export default function ConverterView() {
   const handleClear = () => {
     setInput('');
     setOutput('');
+    setDetectedUnknowns([]);
+  };
+
+  const openReportDialog = (word?: string, currentArabic?: string) => {
+    setReportRomanized(word || '');
+    setReportCurrentOutput(currentArabic || '');
+    setReportCorrectArabic('');
+    setReportExplanation('');
+    setReportSuccess(false);
+    setShowReportModal(true);
+  };
+
+  const handleReportSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reportRomanized.trim() || !reportCorrectArabic.trim()) return;
+    setIsReporting(true);
+    try {
+      await submitReport({
+        romanized: reportRomanized.trim(),
+        currentOutput: reportCurrentOutput.trim(),
+        correctArabic: reportCorrectArabic.trim(),
+        explanation: reportExplanation.trim()
+      });
+      setReportSuccess(true);
+    } catch (err) {
+      console.error('Failed to submit correction report', err);
+    } finally {
+      setIsReporting(false);
+    }
   };
 
   // Calculate metrics
@@ -205,6 +246,18 @@ export default function ConverterView() {
           >
             {output || <span className="text-white/40 text-lg font-sans">Arabic transliterated script will appear here...</span>}
           </div>
+          {detectedUnknowns.length > 0 && (
+            <div className="mx-5 mb-4 p-3.5 bg-white/10 dark:bg-white/5 border border-white/20 dark:border-white/10 rounded-2xl flex items-center gap-2.5 text-white animate-fade-in">
+              <AlertTriangle className="h-4 w-4 text-amber-300 shrink-0" />
+              <p className="text-xs">
+                {detectedUnknowns.length === 1 ? (
+                  <span>Unknown word <strong>'{detectedUnknowns[0]}'</strong> has been submitted for review.</span>
+                ) : (
+                  <span><strong>{detectedUnknowns.length}</strong> unknown words were sent for review.</span>
+                )}
+              </p>
+            </div>
+          )}
           <div className="p-5 bg-natural-sage-dark dark:bg-slate-900/60 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div>
@@ -216,6 +269,27 @@ export default function ConverterView() {
           </div>
         </div>
       </div>
+
+      {/* Found an incorrect translation? Banner */}
+      {output && (
+        <div className="bg-amber-500/10 dark:bg-amber-500/5 border border-amber-500/20 dark:border-amber-500/10 p-5 rounded-3xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div className="flex gap-3">
+            <div className="p-2 bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-xl flex items-center justify-center">
+              <AlertTriangle className="h-5 w-5" />
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-slate-900 dark:text-white font-serif">Found an incorrect translation?</h4>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Help improve LisanText. Submit a correction suggestion for our administrator review queue.</p>
+            </div>
+          </div>
+          <button
+            onClick={() => openReportDialog()}
+            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs rounded-xl cursor-pointer shadow-sm transition-colors"
+          >
+            Report / Suggest Correction
+          </button>
+        </div>
+      )}
 
       {/* Detailed Confidence and Word Breakdown Analysis */}
       {wordDetails.length > 0 && (
@@ -298,6 +372,16 @@ export default function ConverterView() {
                       )}
                     </div>
                   )}
+
+                  <div className="mt-auto pt-3 flex justify-end">
+                    <button
+                      onClick={() => openReportDialog(detail.original, detail.method === 'transliteration_rules' ? '' : detail.converted)}
+                      className="text-[10px] font-bold uppercase tracking-wider opacity-75 hover:opacity-100 flex items-center gap-1 transition-all cursor-pointer bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 px-2 py-1 rounded-lg"
+                    >
+                      <AlertTriangle className="h-3 w-3" />
+                      Report Error
+                    </button>
+                  </div>
                 </div>
               );
             })}
@@ -344,6 +428,111 @@ export default function ConverterView() {
           </div>
         )}
       </section>
+
+      {/* Suggest Correction Modal */}
+      {showReportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white dark:bg-slate-950 max-w-md w-full rounded-3xl border border-natural-border/60 dark:border-slate-800 p-6 space-y-5 shadow-2xl">
+            <div className="flex justify-between items-start border-b border-natural-border/20 dark:border-slate-800/40 pb-3">
+              <div>
+                <h3 className="text-lg font-serif font-bold text-slate-900 dark:text-white">Suggest Correction</h3>
+                <p className="text-xs text-slate-500">Submit a translation correction for admin review.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowReportModal(false);
+                  setReportSuccess(false);
+                }}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-sm font-semibold px-2 py-1 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-900 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {reportSuccess ? (
+              <div className="text-center py-6 space-y-3">
+                <div className="w-12 h-12 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto">
+                  <Check className="h-6 w-6" />
+                </div>
+                <h4 className="font-serif font-bold text-base text-slate-900 dark:text-white">Correction Logged!</h4>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Thank you! Your translation suggestion has been saved in the Administrator Review queue.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowReportModal(false);
+                    setReportSuccess(false);
+                  }}
+                  className="mt-4 px-4 py-2 bg-natural-sage hover:bg-natural-sage-hover text-white rounded-xl text-xs font-semibold cursor-pointer"
+                >
+                  Done
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleReportSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">Romanized Word</label>
+                  <input
+                    type="text"
+                    required
+                    value={reportRomanized}
+                    onChange={(e) => setReportRomanized(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-xl border border-natural-border dark:border-slate-800 bg-transparent text-sm focus:outline-none focus:border-natural-sage text-slate-800 dark:text-slate-100"
+                    placeholder="e.g. moula"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">Current Output</label>
+                    <input
+                      type="text"
+                      value={reportCurrentOutput}
+                      onChange={(e) => setReportCurrentOutput(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-xl border border-natural-border dark:border-slate-800 bg-transparent text-sm focus:outline-none focus:border-natural-sage text-slate-800 dark:text-slate-100"
+                      placeholder="e.g. مواى"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">Correct Arabic Script</label>
+                    <input
+                      type="text"
+                      required
+                      value={reportCorrectArabic}
+                      onChange={(e) => setReportCorrectArabic(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-xl border border-natural-border dark:border-slate-800 bg-transparent text-sm text-right font-serif focus:outline-none focus:border-natural-sage text-slate-800 dark:text-slate-100"
+                      placeholder="e.g. مولى"
+                      style={{ direction: 'rtl' }}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">Optional Explanation</label>
+                  <textarea
+                    value={reportExplanation}
+                    onChange={(e) => setReportExplanation(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-xl border border-natural-border dark:border-slate-800 bg-transparent text-xs resize-none focus:outline-none focus:border-natural-sage h-20 text-slate-800 dark:text-slate-100"
+                    placeholder="Explain why this correction is correct..."
+                  />
+                </div>
+
+                <div className="pt-2 border-t border-natural-border/20 dark:border-slate-800/40">
+                  <button
+                    type="submit"
+                    disabled={isReporting}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 bg-natural-sage hover:bg-natural-sage-hover text-white text-xs font-semibold rounded-xl cursor-pointer disabled:opacity-50 transition-all shadow-md shadow-natural-sage/10"
+                  >
+                    {isReporting ? 'Submitting...' : 'Submit Suggestion'}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
